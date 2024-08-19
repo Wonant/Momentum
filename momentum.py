@@ -1,6 +1,7 @@
 import pandas as pd
 from getData import djia_stocks
 import matplotlib.pyplot as plt
+import numpy as np
 
 momentum_list = {}
 
@@ -59,13 +60,28 @@ def split_stock(momentum_list):
     return top_third, middle_third, bottom_third
 
 
-def get_returns(tickers_list, start_date, end_date):
+# REQUIRED: tickers_list must be sorted by momentum (highest --> lowest)
+def get_returns(tickers_list, start_date, end_date, weights):
     portfolio_return = 0
-    weights = 1 / len(tickers_list)
-    for ticker in tickers_list:
-        momentum = calculate_momentum(ticker, start_date, end_date)
-        if momentum is not None:
-            portfolio_return += weights * momentum
+    size = len(tickers_list)
+
+    if weights == "equal":
+        weight_coef = 1 / size
+        for ticker in tickers_list:
+            momentum = calculate_momentum(ticker, start_date, end_date)
+            if momentum is not None:
+                portfolio_return += weight_coef * momentum
+    elif weights == "rank":
+        ranks_dict = {
+            ticker: rank for rank, ticker in enumerate(reversed(tickers_list), 1)
+        }
+        total_ranks = sum(range(1, len(tickers_list) + 1))
+        for ticker in tickers_list:
+            momentum = calculate_momentum(ticker, start_date, end_date)
+            weight_coef = ranks_dict[ticker] / total_ranks
+            if momentum is not None:
+                portfolio_return += weight_coef * momentum
+
     return portfolio_return
 
 
@@ -86,6 +102,8 @@ def momentum_strategy(start_date, end_date):
     momentum_list = get_DJIA_momentum(start_date="2004-01-02", end_date="2004-12-02")
     top_third, middle_third, bottom_third = split_stock(momentum_list)
 
+    print(f"Top Third:{top_third}")
+
     top_tickers = [ticker for ticker, _ in top_third]
     middle_tickers = [ticker for ticker, _ in middle_third]
     bottom_tickers = [ticker for ticker, _ in bottom_third]
@@ -100,9 +118,13 @@ def momentum_strategy(start_date, end_date):
         start_month = months[i - 1]
         end_month = months[i]
 
-        monthly_return_top = get_returns(top_tickers, start_month, end_month)
-        monthly_return_middle = get_returns(middle_tickers, start_month, end_month)
-        monthly_return_bottom = get_returns(bottom_tickers, start_month, end_month)
+        monthly_return_top = get_returns(top_tickers, start_month, end_month, "rank")
+        monthly_return_middle = get_returns(
+            middle_tickers, start_month, end_month, "rank"
+        )
+        monthly_return_bottom = get_returns(
+            bottom_tickers, start_month, end_month, "rank"
+        )
 
         strategy_returns_top.append(monthly_return_top)
         strategy_returns_middle.append(monthly_return_middle)
@@ -115,12 +137,68 @@ def momentum_strategy(start_date, end_date):
     )
 
 
+def performance_statistics(return_stream, title_name):
+    investment = 1000 * (1 + return_stream).cumprod()
+    cumulative_returns = (1 + return_stream).cumprod()
+    plt.figure(figsize=(10, 6))
+    investment.plot(title=f"({title_name}): $1000 Investment Growth")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Returns")
+    plt.show()
+
+    # Mean return annualized
+    mean_return_annualized = return_stream.mean() * 12
+
+    # Volatility
+    volatility = return_stream.std() * np.sqrt(12)
+
+    # Sharpe Ratio (INFO: Look into if the *12 from mean_return_annualized should remain)
+    sharpe_ratio = mean_return_annualized / volatility
+
+    hit_rate = (return_stream > 0).sum() / len(return_stream)
+
+    drawdown = cumulative_returns / cumulative_returns.cummax() - 1
+    max_drawdown = drawdown.min()
+
+    # Calculate highest monthly gain (annualized)
+    highest_monthly_gain = return_stream.max() * 12
+
+    # Calculate worst monthly loss (annualized)
+    worst_monthly_loss = return_stream.min() * 12
+
+    # Output the statistics
+    stats = {
+        "Mean Return (Annualized)": mean_return_annualized,
+        "Volatility (Annualized)": volatility,
+        "Sharpe Ratio": sharpe_ratio,
+        "Hit Rate": hit_rate,
+        "Max Drawdown": max_drawdown,
+        "Highest Monthly Gain (Annualized)": highest_monthly_gain,
+        "Worst Monthly Loss (Annualized)": worst_monthly_loss,
+    }
+
+    for key, value in stats.items():
+        print(f"{key}: {value:.2f}")
+
+    return stats
+
+
 # Run the strategy for the period
 start_date = "2005-01-04"
 end_date = "2006-01-03"
 strategy_returns_top, strategy_returns_middle, strategy_returns_bottom = (
     momentum_strategy(start_date, end_date)
 )
+
+# Evaluate the performance for each segment
+print("\nPerformance Statistics (Top Third):")
+stats_top = performance_statistics(strategy_returns_top, "Top Third")
+
+print("\nPerformance Statistics (Middle Third):")
+stats_middle = performance_statistics(strategy_returns_middle, "Middle Third")
+
+print("\nPerformance Statistics (Bottom Third):")
+stats_bottom = performance_statistics(strategy_returns_bottom, "Bottom Third")
 
 # Evaluate the performance
 cumulative_returns_top = (1 + strategy_returns_top).cumprod()
