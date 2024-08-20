@@ -2,6 +2,7 @@ import pandas as pd
 from getData import djia_stocks
 import matplotlib.pyplot as plt
 import numpy as np
+import utils
 
 momentum_list = {}
 
@@ -45,23 +46,8 @@ def get_DJIA_momentum(start_date, end_date):
     return momentum_list
 
 
-def split_stock(momentum_list):
-    sorted_momentum_list = sorted(
-        momentum_list.items(), key=lambda x: x[1], reverse=True
-    )
-    total_num = len(sorted_momentum_list)
-    print(total_num)
-    third = total_num // 3  # Assume # always divisable by 3
-
-    top_third = sorted_momentum_list[:third]
-    middle_third = sorted_momentum_list[third : 2 * third]
-    bottom_third = sorted_momentum_list[2 * third :]
-
-    return top_third, middle_third, bottom_third
-
-
 # REQUIRED: tickers_list must be sorted by momentum (highest --> lowest)
-def get_returns(tickers_list, start_date, end_date, weights):
+def get_returns(tickers_list, start_date, end_date, weights, market_cap_dict):
     portfolio_return = 0
     size = len(tickers_list)
 
@@ -80,27 +66,48 @@ def get_returns(tickers_list, start_date, end_date, weights):
             momentum = calculate_momentum(ticker, start_date, end_date)
             weight_coef = ranks_dict[ticker] / total_ranks
             if momentum is not None:
+                # print(f"{ticker}:{weight_coef}")
                 portfolio_return += weight_coef * momentum
+    elif weights == "value":
+        if market_cap_dict is None:
+            raise ValueError("Market caps are required for value weighting.")
+        total_market_cap = sum(market_cap_dict[ticker] for ticker in tickers_list)
+        for ticker in tickers_list:
+            momentum = calculate_momentum(ticker, start_date, end_date)
+            if momentum is not None:
+                allocation = market_cap_dict[ticker] / total_market_cap
+                portfolio_return += allocation * momentum
 
     return portfolio_return
 
 
-def momentum_strategy(start_date, end_date):
+def momentum_strategy(start_date, end_date, lookback, portfolio_weight):
     # Convert strings to datetime objects
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
 
-    # Adjust the dates
-    adjusted_start_date = start_date - pd.DateOffset(months=12)
-    adjusted_end_date = start_date - pd.DateOffset(months=1)
+    if lookback == "3-month":
+        adjusted_start_date = start_date - pd.DateOffset(days=91)
+        adjusted_end_date = start_date
+    elif lookback == "6-month":
+        adjusted_start_date = start_date - pd.DateOffset(days=182)
+        adjusted_end_date = start_date
+    elif lookback == "9-month":
+        adjusted_start_date = start_date - pd.DateOffset(days=273)
+        adjusted_end_date = start_date
+    elif lookback == "11-month-skip-1-month":
+        adjusted_start_date = start_date - pd.DateOffset(days=364)
+        adjusted_end_date = start_date - pd.DateOffset(days=28)
 
     # momentum_list = get_DJIA_momentum(
     #    start_date=adjusted_start_date.strftime("%Y-%m-%d"),
     #    end_date=adjusted_end_date.strftime("%Y-%m-%d"),
     # )
 
-    momentum_list = get_DJIA_momentum(start_date="2004-01-02", end_date="2004-12-02")
-    top_third, middle_third, bottom_third = split_stock(momentum_list)
+    momentum_list = get_DJIA_momentum(
+        start_date=adjusted_start_date, end_date=adjusted_end_date
+    )
+    top_third, middle_third, bottom_third = utils.split_stock(momentum_list)
 
     print(f"Top Third:{top_third}")
 
@@ -118,12 +125,35 @@ def momentum_strategy(start_date, end_date):
         start_month = months[i - 1]
         end_month = months[i]
 
-        monthly_return_top = get_returns(top_tickers, start_month, end_month, "rank")
+        print(start_month)
+        print(end_month)
+
+        market_cap_top = utils.get_market_cap(top_tickers, start_month)
+        market_cap_middle = utils.get_market_cap(middle_tickers, start_month)
+        market_cap_bottom = utils.get_market_cap(bottom_tickers, start_month)
+
+        print(f"MarketCapTop:{market_cap_top}")
+
+        monthly_return_top = get_returns(
+            top_tickers,
+            start_month,
+            end_month,
+            portfolio_weight,
+            market_cap_dict=market_cap_top,
+        )
         monthly_return_middle = get_returns(
-            middle_tickers, start_month, end_month, "rank"
+            middle_tickers,
+            start_month,
+            end_month,
+            portfolio_weight,
+            market_cap_dict=market_cap_middle,
         )
         monthly_return_bottom = get_returns(
-            bottom_tickers, start_month, end_month, "rank"
+            bottom_tickers,
+            start_month,
+            end_month,
+            portfolio_weight,
+            market_cap_dict=market_cap_bottom,
         )
 
         strategy_returns_top.append(monthly_return_top)
@@ -187,7 +217,7 @@ def performance_statistics(return_stream, title_name):
 start_date = "2005-01-04"
 end_date = "2006-01-03"
 strategy_returns_top, strategy_returns_middle, strategy_returns_bottom = (
-    momentum_strategy(start_date, end_date)
+    momentum_strategy(start_date, end_date, "11-month-skip-1-month", "equal")
 )
 
 # Evaluate the performance for each segment
@@ -216,16 +246,3 @@ plt.xlabel("Date")
 plt.ylabel("Cumulative Return")
 plt.legend()
 plt.show()
-
-# Calculate performance metrics
-sharpe_ratio_top = strategy_returns_top.mean() / strategy_returns_top.std() * (12**0.5)
-sharpe_ratio_middle = (
-    strategy_returns_middle.mean() / strategy_returns_middle.std() * (12**0.5)
-)
-sharpe_ratio_bottom = (
-    strategy_returns_bottom.mean() / strategy_returns_bottom.std() * (12**0.5)
-)
-
-print(f"Sharpe Ratio (Top Third): {sharpe_ratio_top:.2f}")
-print(f"Sharpe Ratio (Middle Third): {sharpe_ratio_middle:.2f}")
-print(f"Sharpe Ratio (Bottom Third): {sharpe_ratio_bottom:.2f}")
