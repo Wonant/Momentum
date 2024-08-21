@@ -21,7 +21,6 @@ def split_stock(momentum_list):
 def get_market_cap(tickers_list, date):
     market_caps = {}
     date = pd.to_datetime(date)
-    print(f"MarketCapDate: {date}")
 
     # Used so we can take earlier Market Cap if not found
     for ticker in tickers_list:

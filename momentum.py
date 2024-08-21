@@ -36,13 +36,9 @@ def calculate_momentum(ticker, start_date, end_date):
 
 def get_DJIA_momentum(start_date, end_date):
     for ticker in djia_stocks:
-        print(start_date)
-        print(end_date)
         momentum = calculate_momentum(ticker, start_date, end_date)
         if momentum is not None:
             momentum_list[ticker] = momentum
-
-    print("Momentum List: ", momentum_list)
     return momentum_list
 
 
@@ -76,6 +72,7 @@ def get_returns(tickers_list, start_date, end_date, weights, market_cap_dict):
             momentum = calculate_momentum(ticker, start_date, end_date)
             if momentum is not None:
                 allocation = market_cap_dict[ticker] / total_market_cap
+                print(allocation)
                 portfolio_return += allocation * momentum
 
     return portfolio_return
@@ -109,8 +106,6 @@ def momentum_strategy(start_date, end_date, lookback, portfolio_weight):
     )
     top_third, middle_third, bottom_third = utils.split_stock(momentum_list)
 
-    print(f"Top Third:{top_third}")
-
     top_tickers = [ticker for ticker, _ in top_third]
     middle_tickers = [ticker for ticker, _ in middle_third]
     bottom_tickers = [ticker for ticker, _ in bottom_third]
@@ -125,14 +120,9 @@ def momentum_strategy(start_date, end_date, lookback, portfolio_weight):
         start_month = months[i - 1]
         end_month = months[i]
 
-        print(start_month)
-        print(end_month)
-
         market_cap_top = utils.get_market_cap(top_tickers, start_month)
         market_cap_middle = utils.get_market_cap(middle_tickers, start_month)
         market_cap_bottom = utils.get_market_cap(bottom_tickers, start_month)
-
-        print(f"MarketCapTop:{market_cap_top}")
 
         monthly_return_top = get_returns(
             top_tickers,
@@ -176,13 +166,10 @@ def performance_statistics(return_stream, title_name):
     plt.ylabel("Cumulative Returns")
     plt.show()
 
-    # Mean return annualized
     mean_return_annualized = return_stream.mean() * 12
 
-    # Volatility
     volatility = return_stream.std() * np.sqrt(12)
 
-    # Sharpe Ratio (INFO: Look into if the *12 from mean_return_annualized should remain)
     sharpe_ratio = mean_return_annualized / volatility
 
     hit_rate = (return_stream > 0).sum() / len(return_stream)
@@ -196,7 +183,6 @@ def performance_statistics(return_stream, title_name):
     # Calculate worst monthly loss (annualized)
     worst_monthly_loss = return_stream.min() * 12
 
-    # Output the statistics
     stats = {
         "Mean Return (Annualized)": mean_return_annualized,
         "Volatility (Annualized)": volatility,
@@ -213,14 +199,12 @@ def performance_statistics(return_stream, title_name):
     return stats
 
 
-# Run the strategy for the period
 start_date = "2005-01-04"
 end_date = "2006-01-03"
 strategy_returns_top, strategy_returns_middle, strategy_returns_bottom = (
-    momentum_strategy(start_date, end_date, "11-month-skip-1-month", "equal")
+    momentum_strategy(start_date, end_date, "11-month-skip-1-month", "rank")
 )
 
-# Evaluate the performance for each segment
 print("\nPerformance Statistics (Top Third):")
 stats_top = performance_statistics(strategy_returns_top, "Top Third")
 
@@ -230,12 +214,10 @@ stats_middle = performance_statistics(strategy_returns_middle, "Middle Third")
 print("\nPerformance Statistics (Bottom Third):")
 stats_bottom = performance_statistics(strategy_returns_bottom, "Bottom Third")
 
-# Evaluate the performance
 cumulative_returns_top = (1 + strategy_returns_top).cumprod()
 cumulative_returns_middle = (1 + strategy_returns_middle).cumprod()
 cumulative_returns_bottom = (1 + strategy_returns_bottom).cumprod()
 
-# Plot cumulative returns
 
 plt.figure(figsize=(12, 8))
 cumulative_returns_top.plot(label="Top Third")
