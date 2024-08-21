@@ -27,12 +27,9 @@ djia_stocks = [
     "PG",
     "TRV",
     "UNH",
-    "CRM",
     "VZ",
-    "V",
     "WMT",
     "DIS",
-    "DOW",
 ]
 
 
